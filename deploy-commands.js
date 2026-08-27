@@ -6,6 +6,7 @@ const commandFiles = [
   require('./commands/setrole'),
   require('./commands/setconfig'),
   require('./commands/preview'),
+  require('./commands/draft'),
 ];
 
 async function registerCommands(client) {
