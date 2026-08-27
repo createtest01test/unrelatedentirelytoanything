@@ -14,7 +14,7 @@ async function registerCommands(client) {
     const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 
     await rest.put(
-      Routes.applicationCommands(client.user.id),
+      Routes.applicationGuildCommands(client.user.id, '1480349095842283520'),
       { body: commandFiles.map(c => c.data.toJSON()) }
     );
     console.log('✅ Slash commands registered globally');
