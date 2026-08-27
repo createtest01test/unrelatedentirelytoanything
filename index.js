@@ -23,6 +23,7 @@ const commands = [
   require('./commands/setrole'),
   require('./commands/setconfig'),
   require('./commands/preview'),
+  require('./commands/draft'),
 ];
 
 for (const command of commands) {
@@ -95,8 +96,19 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
-// ─── SLASH COMMAND HANDLER ────────────────────────────────────────────────────
+// ─── SLASH COMMAND + MODAL HANDLER ───────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
+  // Handle modal submissions
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === 'draft_modal') {
+      const draftCommand = client.commands.get('draft');
+      if (draftCommand?.handleModal) {
+        await draftCommand.handleModal(interaction, client);
+      }
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const command = client.commands.get(interaction.commandName);
