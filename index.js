@@ -22,6 +22,7 @@ const commands = [
   require('./commands/setconfig'),
   require('./commands/draft'),
   require('./commands/edit'),
+  require('./commands/rolelist'),
 ];
 
 for (const command of commands) {

@@ -7,6 +7,7 @@ const commandFiles = [
   require('./commands/setconfig'),
   require('./commands/draft'),
   require('./commands/edit'),
+  require('./commands/rolelist'),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
