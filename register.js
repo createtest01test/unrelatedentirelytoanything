@@ -2,12 +2,11 @@ require('dotenv').config();
 const { REST, Routes } = require('discord.js');
 
 const commandFiles = [
-  require('./commands/send'),
   require('./commands/setwelcome'),
   require('./commands/setrole'),
   require('./commands/setconfig'),
-  require('./commands/preview'),
   require('./commands/draft'),
+  require('./commands/edit'),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);

@@ -17,12 +17,11 @@ client.commands = new Collection();
 
 // Load command handlers
 const commands = [
-  require('./commands/send'),
   require('./commands/setwelcome'),
   require('./commands/setrole'),
   require('./commands/setconfig'),
-  require('./commands/preview'),
   require('./commands/draft'),
+  require('./commands/edit'),
 ];
 
 for (const command of commands) {
@@ -96,9 +95,11 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit()) {
     if (interaction.customId === 'draft_modal') {
       const draftCommand = client.commands.get('draft');
-      if (draftCommand?.handleModal) {
-        await draftCommand.handleModal(interaction, client);
-      }
+      if (draftCommand?.handleModal) await draftCommand.handleModal(interaction, client);
+    }
+    if (interaction.customId === 'edit_modal') {
+      const editCommand = client.commands.get('edit');
+      if (editCommand?.handleModal) await editCommand.handleModal(interaction, client);
     }
     return;
   }
