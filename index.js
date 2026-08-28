@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { REST, Routes } = require('discord.js');
 const { Client, GatewayIntentBits, Partials, Collection, ActivityType } = require('discord.js');
 const { loadConfig, saveConfig } = require('./config');
 const { registerCommands } = require('./deploy-commands');
@@ -32,6 +33,12 @@ for (const command of commands) {
 
 // ─── READY ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
+  // Add this temporarily to clear old guild commands
+  const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+  await rest.put(Routes.applicationGuildCommands(client.user.id, 'YOUR_OLD_SERVER_ID'), { body: [] });
+  console.log('✅ Cleared old guild commands');
+
+  // ... rest of your ready block
   console.log(`✅ Logged in as ${client.user.tag}`);
   await registerCommands(client);
   updateStatus(client);
