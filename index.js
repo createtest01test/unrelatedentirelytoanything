@@ -91,6 +91,59 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
+// ─── MESSAGE COMMANDS (prefix) ───────────────────────────────────────────────
+client.on('messageCreate', async (message) => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith('!')) return;
+
+  // Only allow members with Manage Messages permission
+  if (!message.member?.permissions.has('ManageMessages')) return;
+
+  const args = message.content.slice(1).trim().split(/\s+/);
+  const cmd = args[0].toLowerCase();
+
+  // !rolelist <role name or @role>
+  if (cmd === 'rolelist') {
+    const roleName = args.slice(1).join(' ').replace(/^<@&(\d+)>$/, '$1');
+    if (!roleName) {
+      return message.reply('Usage: `!rolelist RoleName` or `!rolelist @Role`');
+    }
+
+    await message.guild.members.fetch();
+
+    // Find by ID (if @mentioned) or by name (case-insensitive)
+    const role = message.guild.roles.cache.get(roleName)
+      || message.guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
+
+    if (!role) {
+      return message.reply(`❌ Couldn't find a role called **${roleName}**`);
+    }
+
+    const members = role.members.map(m => m.user.username).sort();
+
+    if (!members.length) {
+      return message.reply(`No members found with the **${role.name}** role.`);
+    }
+
+    const chunks = [];
+    let current = `**${role.name}** — ${members.length} members:\n\`\`\`\n`;
+    for (const name of members) {
+      if ((current + name + '\n').length > 1900) {
+        current += '```';
+        chunks.push(current);
+        current = '```\n';
+      }
+      current += name + '\n';
+    }
+    current += '```';
+    chunks.push(current);
+
+    for (const chunk of chunks) {
+      await message.channel.send(chunk);
+    }
+  }
+});
+
 // ─── SLASH COMMAND + MODAL HANDLER ───────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
   if (interaction.isModalSubmit()) {
