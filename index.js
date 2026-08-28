@@ -35,7 +35,7 @@ for (const command of commands) {
 client.once('ready', async () => {
   // Add this temporarily to clear old guild commands
   const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
-  await rest.put(Routes.applicationGuildCommands(client.user.id, 'YOUR_OLD_SERVER_ID'), { body: [] });
+  await rest.put(Routes.applicationGuildCommands(client.user.id, '1494002714009665537'), { body: [] });
   console.log('✅ Cleared old guild commands');
 
   // ... rest of your ready block
