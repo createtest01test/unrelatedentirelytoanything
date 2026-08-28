@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, ActivityType } = require('discord.js');
 const { loadConfig, saveConfig } = require('./config');
-const { registerCommands } = require('./deploy-commands');
 
 const client = new Client({
   intents: [
@@ -33,7 +32,6 @@ for (const command of commands) {
 // ─── READY ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
-  await registerCommands(client);
   updateStatus(client);
   // Refresh status every 5 minutes in case members join/leave
   setInterval(() => updateStatus(client), 5 * 60 * 1000);
@@ -48,7 +46,7 @@ async function updateStatus(client) {
     const guild = client.guilds.cache.first();
     if (!guild) return;
 
-    await guild.members.fetch(); // Ensure cache is populated
+    await guild.members.fetch();
     const role = guild.roles.cache.find(r => r.name === config.statusRole);
     if (!role) return;
 
@@ -77,12 +75,9 @@ client.on('guildMemberAdd', async (member) => {
     const channel = member.guild.channels.cache.get(config.welcomeChannelId);
     if (!channel) return;
 
-    // Build the welcome message
     let content = config.welcomeMessage.replace('{user}', `<@${member.id}>`);
-
     const messageOptions = { content };
 
-    // Attach image if configured
     if (config.welcomeImageUrl) {
       const { EmbedBuilder } = require('discord.js');
       const embed = new EmbedBuilder().setImage(config.welcomeImageUrl);
@@ -98,7 +93,6 @@ client.on('guildMemberAdd', async (member) => {
 
 // ─── SLASH COMMAND + MODAL HANDLER ───────────────────────────────────────────
 client.on('interactionCreate', async (interaction) => {
-  // Handle modal submissions
   if (interaction.isModalSubmit()) {
     if (interaction.customId === 'draft_modal') {
       const draftCommand = client.commands.get('draft');
