@@ -116,8 +116,6 @@ async function openTicket(client, user, firstMessage) {
     const channel = await staffGuild.channels.fetch(existing.channelId).catch(() => null);
     if (channel) {
       await channel.setParent(TICKETS_CATEGORY_ID, { lockPermissions: false });
-      // Always restore to the original clean name stored at creation time
-      await channel.setName(existing.originalName);
       existing.status = 'open';
       ticketsByUser.set(user.id, existing);
       await saveTicketData(client);
@@ -167,7 +165,7 @@ async function openTicket(client, user, firstMessage) {
   await user.send({ embeds: [new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('Ticket Created')
-    .setDescription('Your message has been received! Our staff will get back to you here in DMs.\n\n**Please send your question or report in full so we have a clear understanding of the situation**.')
+    .setDescription('Your message has been received! Our staff will get back to you here in DMs.\n\nJust keep sending messages here and we\'ll see them.')
     .setTimestamp()] });
 }
 
@@ -250,8 +248,6 @@ async function closeTicket(interaction, client) {
   await saveTicketData(client);
 
   await interaction.channel.setParent(ARCHIVE_CATEGORY_ID, { lockPermissions: false });
-  // Always use the original name with archived- prefix to avoid stacking
-  await interaction.channel.setName(`archived-${ticket.originalName || interaction.channel.name.replace(/^archived-/, '')}`);
 
   await interaction.channel.send({ embeds: [new EmbedBuilder()
     .setColor(0xed4245)
