@@ -26,6 +26,7 @@ const commands = [
   require('./commands/rolelist'),
   require('./commands/closeticket'),
   require('./commands/staffmode'),
+  require('./commands/openticket'),
 ];
 
 for (const command of commands) {

@@ -165,7 +165,7 @@ async function openTicket(client, user, firstMessage) {
   await user.send({ embeds: [new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('Ticket Created')
-    .setDescription('Your message has been received! Our staff will get back to you here in DMs.\n\nJust keep sending messages here and we\'ll see them.')
+    .setDescription('Your message has been received! Our staff will get back to you here in DMs.\n\n**Please send your question or report in full so we have a clear understanding of the situation**.')
     .setTimestamp()] });
 }
 
@@ -203,13 +203,22 @@ async function forwardToUser(client, channelId, staffMember, message) {
   if (!user) return;
 
   client._staffModes = client._staffModes || {};
-  const mode       = client._staffModes[staffMember.id] || 'staff';
-  const senderName = mode === 'username' ? staffMember.username : 'Staff';
-  const avatar     = mode === 'username' ? staffMember.displayAvatarURL() : null;
+  const mode = client._staffModes[staffMember.id] || 'staff';
+
+  // Always show bot avatar, name is "ChemicaL Staff" or "ChemicaL Staff - username"
+  const displayName = mode === 'username'
+    ? `ChemicaL Staff - ${staffMember.username}`
+    : 'ChemicaL Staff';
+  const botAvatar = client.user.displayAvatarURL();
+
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
   const embed = new EmbedBuilder()
     .setColor(0x57f287)
-    .setAuthor({ name: senderName, ...(avatar ? { iconURL: avatar } : {}) });
+    .setAuthor({ name: displayName, iconURL: botAvatar })
+    .setFooter({ text: `Response • ${timeStr}` })
+    .setTimestamp();
 
   if (message.content) embed.setDescription(message.content);
 

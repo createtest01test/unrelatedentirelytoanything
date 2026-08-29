@@ -16,6 +16,7 @@ const mainCommands = [
 const staffCommands = [
   require('./commands/closeticket'),
   require('./commands/staffmode'),
+  require('./commands/openticket'),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
