@@ -1,16 +1,50 @@
 const { EmbedBuilder, ChannelType } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 
 const STAFF_GUILD_ID      = '1494002714009665537';
 const MAIN_GUILD_ID       = '1480349095842283520';
 const TICKETS_CATEGORY_ID = '1543326930911240242';
 const ARCHIVE_CATEGORY_ID = '1543327033478742096';
+const DATA_FILE           = path.join(__dirname, 'tickets-data.json');
 
-// In-memory store: userId → { channelId, ticketNumber, status }
-// and channelId → userId for reverse lookup
-const ticketsByUser    = new Map();
-const ticketsByChannel = new Map();
+// ── Persist to disk ────────────────────────────────────────────────────────────
+function loadData() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      return {
+        ticketsByUser:    new Map(Object.entries(raw.ticketsByUser || {})),
+        ticketsByChannel: new Map(Object.entries(raw.ticketsByChannel || {})),
+        ticketCounter:    raw.ticketCounter || 1,
+      };
+    }
+  } catch (err) {
+    console.error('Failed to load ticket data:', err);
+  }
+  return {
+    ticketsByUser:    new Map(),
+    ticketsByChannel: new Map(),
+    ticketCounter:    1,
+  };
+}
 
-let ticketCounter = 1;
+function saveData() {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify({
+      ticketsByUser:    Object.fromEntries(ticketsByUser),
+      ticketsByChannel: Object.fromEntries(ticketsByChannel),
+      ticketCounter,
+    }, null, 2));
+  } catch (err) {
+    console.error('Failed to save ticket data:', err);
+  }
+}
+
+const loaded = loadData();
+const ticketsByUser    = loaded.ticketsByUser;
+const ticketsByChannel = loaded.ticketsByChannel;
+let   ticketCounter    = loaded.ticketCounter;
 
 function padTicketNum(n) {
   return String(n).padStart(4, '0');
@@ -18,22 +52,16 @@ function padTicketNum(n) {
 
 // ── Get user display info ──────────────────────────────────────────────────────
 async function getUserInfo(user, mainGuild) {
-  let nickname = null;
-  let pronouns = null;
-
   try {
     const member = await mainGuild.members.fetch(user.id).catch(() => null);
     if (member) {
-      nickname = member.nickname || null;
-      // Discord doesn't expose pronouns via API natively,
-      // but some servers use bots that store them. We'll try the member's bio if available.
+      return { username: user.username, nickname: member.nickname || null };
     }
   } catch (_) {}
-
-  return { username: user.username, nickname, pronouns };
+  return { username: user.username, nickname: null };
 }
 
-// ── Format the header shown in the ticket channel ─────────────────────────────
+// ── Format the ticket header embed ────────────────────────────────────────────
 function buildTicketHeader(user, info, ticketNum) {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
@@ -42,7 +70,7 @@ function buildTicketHeader(user, info, ticketNum) {
     .addFields(
       { name: 'Username', value: `${info.username} (<@${user.id}>)`, inline: true },
       { name: 'Nickname', value: info.nickname || '*none*', inline: true },
-      { name: 'User ID', value: user.id, inline: false },
+      { name: 'User ID',  value: user.id, inline: false },
     )
     .setFooter({ text: 'Reply in this channel to respond. Use /closeticket to archive.' })
     .setTimestamp();
@@ -61,35 +89,54 @@ async function openTicket(client, user, firstMessage) {
 
   const existing = ticketsByUser.get(user.id);
 
-  // ── Reopen closed ticket ───────────────────────────────────────────────────
+  // ── Reopen a closed ticket ─────────────────────────────────────────────────
   if (existing && existing.status === 'closed') {
     try {
       const channel = await staffGuild.channels.fetch(existing.channelId).catch(() => null);
       if (channel) {
+        // Move back to active tickets category
         await channel.setParent(TICKETS_CATEGORY_ID, { lockPermissions: false });
+
+        // Strip "archived-" prefix from channel name if present
+        if (channel.name.startsWith('archived-')) {
+          await channel.setName(channel.name.replace('archived-', ''));
+        }
+
         existing.status = 'open';
         ticketsByUser.set(user.id, existing);
+        saveData();
 
         const reopenEmbed = new EmbedBuilder()
           .setColor(0x57f287)
           .setDescription(`🔄 **Ticket reopened** — ${user.username} sent a new message.`)
           .setTimestamp();
         await channel.send({ embeds: [reopenEmbed] });
-
-        // Forward the new message
-        await forwardToChannel(channel, user, firstMessage, true);
+        await forwardToChannel(channel, user, firstMessage);
         await user.send('↩️ Your ticket has been reopened. Staff will be with you shortly.');
         return;
       }
     } catch (err) {
       console.error('Reopen error:', err);
     }
+    // Channel was deleted or unreachable — fall through to create a new one
+    ticketsByUser.delete(user.id);
   }
 
-  // ── Brand new ticket ───────────────────────────────────────────────────────
-  const ticketNum = padTicketNum(ticketCounter++);
-  const channelName = `${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}-${ticketNum}`;
+  // ── Skip if already open ───────────────────────────────────────────────────
+  if (existing && existing.status === 'open') {
+    const channel = await staffGuild.channels.fetch(existing.channelId).catch(() => null);
+    if (channel) {
+      await forwardToChannel(channel, user, firstMessage);
+      return;
+    }
+    // Channel missing, fall through to create new
+    ticketsByUser.delete(user.id);
+  }
 
+  // ── Create brand new ticket ────────────────────────────────────────────────
+  const ticketNum  = padTicketNum(ticketCounter++);
+  const safeName   = user.username.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+  const channelName = `${safeName}-${ticketNum}`;
   const info = mainGuild ? await getUserInfo(user, mainGuild) : { username: user.username, nickname: null };
 
   const channel = await staffGuild.channels.create({
@@ -99,66 +146,58 @@ async function openTicket(client, user, firstMessage) {
     topic: `Ticket #${ticketNum} | User: ${user.username} (${user.id})`,
   });
 
-  ticketsByUser.set(user.id, { channelId: channel.id, ticketNumber: ticketNum, status: 'open' });
+  ticketsByUser.set(user.id,       { channelId: channel.id, ticketNumber: ticketNum, status: 'open' });
   ticketsByChannel.set(channel.id, user.id);
+  saveData();
 
-  // Send the header embed
   await channel.send({ embeds: [buildTicketHeader(user, info, ticketNum)] });
+  await forwardToChannel(channel, user, firstMessage);
 
-  // Forward first message
-  await forwardToChannel(channel, user, firstMessage, true);
-
-  // Confirm to user
   const confirmEmbed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('Ticket Created')
-    .setDescription('Your message has been received! Our staff will get back to you shortly.\n\nPlease send your question or report in full so we have a clear understanding of the situation.')
+    .setDescription('Your message has been received! Our staff will get back to you here in DMs.\n\nJust keep sending messages here and we\'ll see them.')
     .setTimestamp();
   await user.send({ embeds: [confirmEmbed] });
 }
 
-// ── Forward a DM message to the ticket channel ────────────────────────────────
-async function forwardToChannel(channel, user, message, isFirst = false) {
+// ── Forward DM → ticket channel ───────────────────────────────────────────────
+async function forwardToChannel(channel, user, message) {
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setAuthor({ name: `${user.username}`, iconURL: user.displayAvatarURL() });
+    .setAuthor({ name: user.username, iconURL: user.displayAvatarURL() });
 
   if (message.content) embed.setDescription(message.content);
 
-  // Handle attachments
   const files = [];
   if (message.attachments?.size) {
     const imgs = [];
     for (const att of message.attachments.values()) {
-      if (att.contentType?.startsWith('image/')) {
-        imgs.push(att.url);
-      } else {
-        files.push(att.url);
-      }
+      if (att.contentType?.startsWith('image/')) imgs.push(att.url);
+      else files.push(att.url);
     }
-    if (imgs.length) embed.setImage(imgs[0]);
+    if (imgs.length)     embed.setImage(imgs[0]);
     if (imgs.length > 1) embed.addFields({ name: 'More images', value: imgs.slice(1).join('\n') });
   }
 
   await channel.send({ embeds: [embed], files });
 }
 
-// ── Forward a staff message to the user's DMs ─────────────────────────────────
+// ── Forward ticket channel → user DM ─────────────────────────────────────────
 async function forwardToUser(client, channelId, staffMember, message) {
   const userId = ticketsByChannel.get(channelId);
   if (!userId) return;
 
-  const ticket = [...ticketsByUser.values()].find(t => t.channelId === channelId);
+  const ticket = ticketsByUser.get(userId);
   if (!ticket || ticket.status === 'closed') return;
 
   const user = await client.users.fetch(userId).catch(() => null);
   if (!user) return;
 
-  // Determine display name
   client._staffModes = client._staffModes || {};
-  const mode = client._staffModes[staffMember.id] || 'staff';
-  const senderName = mode === 'username' ? staffMember.username : 'Staff';
-  const avatar = mode === 'username' ? staffMember.displayAvatarURL() : null;
+  const mode        = client._staffModes[staffMember.id] || 'staff';
+  const senderName  = mode === 'username' ? staffMember.username : 'Staff';
+  const avatar      = mode === 'username' ? staffMember.displayAvatarURL() : null;
 
   const embed = new EmbedBuilder()
     .setColor(0x57f287)
@@ -170,13 +209,10 @@ async function forwardToUser(client, channelId, staffMember, message) {
   if (message.attachments?.size) {
     const imgs = [];
     for (const att of message.attachments.values()) {
-      if (att.contentType?.startsWith('image/')) {
-        imgs.push(att.url);
-      } else {
-        files.push(att.url);
-      }
+      if (att.contentType?.startsWith('image/')) imgs.push(att.url);
+      else files.push(att.url);
     }
-    if (imgs.length) embed.setImage(imgs[0]);
+    if (imgs.length)     embed.setImage(imgs[0]);
     if (imgs.length > 1) embed.addFields({ name: 'More images', value: imgs.slice(1).join('\n') });
   }
 
@@ -192,19 +228,17 @@ async function forwardToUser(client, channelId, staffMember, message) {
 // ── Close a ticket ────────────────────────────────────────────────────────────
 async function closeTicket(interaction, client) {
   const channelId = interaction.channel.id;
-  const userId = ticketsByChannel.get(channelId);
+  const userId    = ticketsByChannel.get(channelId);
 
-  if (!userId) {
-    return interaction.editReply('❌ This channel isn\'t a ticket.');
-  }
+  if (!userId) return interaction.editReply('❌ This channel isn\'t a ticket.');
 
   const ticket = ticketsByUser.get(userId);
   if (!ticket) return interaction.editReply('❌ Ticket data not found.');
 
   ticket.status = 'closed';
   ticketsByUser.set(userId, ticket);
+  saveData();
 
-  // Move to archive category
   await interaction.channel.setParent(ARCHIVE_CATEGORY_ID, { lockPermissions: false });
   await interaction.channel.setName(`archived-${interaction.channel.name}`);
 
@@ -214,7 +248,6 @@ async function closeTicket(interaction, client) {
     .setTimestamp();
   await interaction.channel.send({ embeds: [closeEmbed] });
 
-  // Notify user
   const user = await client.users.fetch(userId).catch(() => null);
   if (user) {
     const userEmbed = new EmbedBuilder()
