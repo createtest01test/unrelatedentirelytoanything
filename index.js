@@ -35,6 +35,7 @@ for (const command of commands) {
 // ─── READY ────────────────────────────────────────────────────────────────────
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
+  await ticketManager.loadTicketData(client);
   updateStatus(client);
   setInterval(() => updateStatus(client), 5 * 60 * 1000);
 });
