@@ -115,9 +115,7 @@ module.exports = {
         .setCustomId('draft_buttons')
         .setLabel('Buttons — one per line: Text | URL | emoji')
         .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder(
-          'Visit Website | https://example.com | 🌐\nJoin Discord | https://discord.gg/abc | 👾\n(emoji is optional, max 5 buttons)'
-        )
+        .setPlaceholder('Text | https://url.com | 🌐\nText | https://url.com\n(emoji optional, max 5)')
         .setRequired(false)
         .setMaxLength(1000);
 
