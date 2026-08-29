@@ -14,12 +14,12 @@ function padTicketNum(n) {
   return String(n).padStart(4, '0');
 }
 
-// ── Save ticket data as a pinned message in the config channel ────────────────
+const TICKET_DATA_CHANNEL_ID = '1543357465377116230';
+
+// ── Save ticket data as a pinned message in the HR data channel ───────────────
 async function saveTicketData(client) {
   try {
-    const channelId = process.env.CONFIG_CHANNEL_ID;
-    if (!channelId) return;
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+    const channel = await client.channels.fetch(TICKET_DATA_CHANNEL_ID).catch(() => null);
     if (!channel) return;
 
     const data = {
@@ -46,9 +46,7 @@ async function saveTicketData(client) {
 // ── Load ticket data from the pinned message ──────────────────────────────────
 async function loadTicketData(client) {
   try {
-    const channelId = process.env.CONFIG_CHANNEL_ID;
-    if (!channelId) return;
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+    const channel = await client.channels.fetch(TICKET_DATA_CHANNEL_ID).catch(() => null);
     if (!channel) return;
 
     const pins = await channel.messages.fetchPinned();
