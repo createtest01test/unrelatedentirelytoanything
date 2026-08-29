@@ -112,7 +112,7 @@ async function openTicket(client, user, firstMessage) {
   const confirmEmbed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('Ticket Created')
-    .setDescription('Your message has been received! Our staff will get back to you here in DMs.\n\nJust keep sending messages here and we\'ll see them.')
+    .setDescription('Your message has been received! Our staff will get back to you shortly.\n\nPlease send your question or report in full so we have a clear understanding of the situation.')
     .setTimestamp();
   await user.send({ embeds: [confirmEmbed] });
 }
