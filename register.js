@@ -8,6 +8,8 @@ const commandFiles = [
   require('./commands/draft'),
   require('./commands/edit'),
   require('./commands/rolelist'),
+  require('./commands/closeticket'),
+  require('./commands/staffmode'),
 ];
 
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);

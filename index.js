@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Collection, ActivityType } = require('discord.js');
 const { loadConfig, saveConfig } = require('./config');
+const ticketManager = require('./tickets');
 
 const client = new Client({
   intents: [
@@ -9,13 +10,13 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.DirectMessages,
   ],
-  partials: [Partials.GuildMember],
+  partials: [Partials.GuildMember, Partials.Channel, Partials.Message],
 });
 
 client.commands = new Collection();
 
-// Load command handlers
 const commands = [
   require('./commands/setwelcome'),
   require('./commands/setrole'),
@@ -23,6 +24,8 @@ const commands = [
   require('./commands/draft'),
   require('./commands/edit'),
   require('./commands/rolelist'),
+  require('./commands/closeticket'),
+  require('./commands/staffmode'),
 ];
 
 for (const command of commands) {
@@ -33,7 +36,6 @@ for (const command of commands) {
 client.once('ready', async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   updateStatus(client);
-  // Refresh status every 5 minutes in case members join/leave
   setInterval(() => updateStatus(client), 5 * 60 * 1000);
 });
 
@@ -43,7 +45,7 @@ async function updateStatus(client) {
     const config = await loadConfig(client);
     if (!config.statusRole || !config.statusTemplate) return;
 
-    const guild = client.guilds.cache.first();
+    const guild = client.guilds.cache.get('1480349095842283520');
     if (!guild) return;
 
     await guild.members.fetch();
@@ -91,39 +93,43 @@ client.on('guildMemberAdd', async (member) => {
   }
 });
 
-// ─── MESSAGE COMMANDS (prefix) ───────────────────────────────────────────────
+// ─── DM HANDLER (tickets) ─────────────────────────────────────────────────────
 client.on('messageCreate', async (message) => {
   if (message.author.bot) return;
-  if (!message.content.startsWith('!')) return;
 
-  // Only allow members with Manage Messages permission
+  // ── Incoming DM → open/reopen ticket ──────────────────────────────────────
+  if (message.channel.type === 1) { // DM channel
+    console.log(`📩 DM from ${message.author.username}: ${message.content}`);
+    await ticketManager.openTicket(client, message.author, message);
+    return;
+  }
+
+  // ── Staff reply in ticket channel → forward to user DM ───────────────────
+  const { ticketsByChannel } = ticketManager;
+  if (ticketsByChannel.has(message.channel.id)) {
+    await ticketManager.forwardToUser(client, message.channel.id, message.author, message);
+    return;
+  }
+
+  // ── Prefix commands ────────────────────────────────────────────────────────
+  if (!message.content.startsWith('!')) return;
   if (!message.member?.permissions.has('ManageMessages')) return;
 
   const args = message.content.slice(1).trim().split(/\s+/);
   const cmd = args[0].toLowerCase();
 
-  // !rolelist <role name or @role>
   if (cmd === 'rolelist') {
     const roleName = args.slice(1).join(' ').replace(/^<@&(\d+)>$/, '$1');
-    if (!roleName) {
-      return message.reply('Usage: `!rolelist RoleName` or `!rolelist @Role`');
-    }
+    if (!roleName) return message.reply('Usage: `!rolelist RoleName` or `!rolelist @Role`');
 
     await message.guild.members.fetch();
-
-    // Find by ID (if @mentioned) or by name (case-insensitive)
     const role = message.guild.roles.cache.get(roleName)
       || message.guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
 
-    if (!role) {
-      return message.reply(`❌ Couldn't find a role called **${roleName}**`);
-    }
+    if (!role) return message.reply(`❌ Couldn't find a role called **${roleName}**`);
 
     const members = role.members.map(m => m.user.username).sort();
-
-    if (!members.length) {
-      return message.reply(`No members found with the **${role.name}** role.`);
-    }
+    if (!members.length) return message.reply(`No members found with the **${role.name}** role.`);
 
     const chunks = [];
     let current = `**${role.name}** — ${members.length} members:\n\`\`\`\n`;
@@ -137,10 +143,7 @@ client.on('messageCreate', async (message) => {
     }
     current += '```';
     chunks.push(current);
-
-    for (const chunk of chunks) {
-      await message.channel.send(chunk);
-    }
+    for (const chunk of chunks) await message.channel.send(chunk);
   }
 });
 
